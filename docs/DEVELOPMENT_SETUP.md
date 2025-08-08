@@ -279,3 +279,29 @@ docker-compose up -d
 
 *最后更新: 2025-07-13*
 *版本: v0.1.7*
+
+## 运行轻量API服务（FastAPI）
+
+项目包含一个基于 FastAPI 的轻量 API 层，封装了 `tradingagents.api.stock_api` 的核心能力。
+
+- 本地运行（使用虚拟环境）：
+  ```bash
+  python3 -m venv .venv
+  . .venv/bin/activate
+  pip install -e .
+  tradingagents-api  # 等价于: python -m api.server
+  ```
+  默认监听: http://127.0.0.1:8000
+
+- 端点（示例）：
+  - GET `/health` 健康检查
+  - GET `/status` 依赖状态
+  - GET `/stocks` 列表（支持 `limit`/`offset`）
+  - GET `/stocks/search?q=平安` 搜索
+  - GET `/stocks/{stock_code}` 基础信息
+  - GET `/stocks/{stock_code}/history?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` 历史数据（text/plain）
+  - GET `/market/summary` 市场概览
+
+- OpenAPI 文档：
+  - 交互式文档: 启动后访问 `http://127.0.0.1:8000/docs`
+  - 固化规范文件: `docs/api/openapi.yaml`

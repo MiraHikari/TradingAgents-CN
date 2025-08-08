@@ -60,6 +60,47 @@ services:
         max-size: "100m"
         max-file: "3"
 
+  # FastAPI 轻量 API 服务
+  api:
+    build: .
+    image: tradingagents-cn:latest
+    container_name: TradingAgents-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - .env:/app/.env
+      - ./api:/app/api
+      - ./tradingagents:/app/tradingagents
+      - ./logs:/app/logs
+      - ./config:/app/config
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+      TZ: "Asia/Shanghai"
+      TRADINGAGENTS_LOG_LEVEL: "INFO"
+      TRADINGAGENTS_LOG_DIR: "/app/logs"
+      TRADINGAGENTS_API_LOG_LEVEL: "info"
+    command: python -m api.server
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - tradingagents-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+
   # MongoDB数据库服务
   mongodb:
     image: mongo:4.4
