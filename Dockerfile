@@ -1,57 +1,64 @@
-# 使用官方Python镜像替代GitHub Container Registry
-FROM python:3.10-slim-bookworm
+# 多阶段构建Dockerfile
+FROM node:18-alpine AS frontend-builder
 
-# 安装uv包管理器
-RUN pip install -i https://mirrors.aliyun.com/pypi/simple uv
+# 设置工作目录
+WORKDIR /app/frontend
 
-WORKDIR /app
+# 复制前端依赖文件
+COPY frontend/package*.json ./
 
-RUN mkdir -p /app/data /app/logs
+# 安装前端依赖
+RUN npm ci --only=production
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+# 复制前端源代码
+COPY frontend/src ./src
+COPY frontend/public ./public
 
-RUN echo 'deb http://mirrors.aliyun.com/debian/ bookworm main' > /etc/apt/sources.list && \
-    echo 'deb-src http://mirrors.aliyun.com/debian/ bookworm main' >> /etc/apt/sources.list && \
-    echo 'deb http://mirrors.aliyun.com/debian/ bookworm-updates main' >> /etc/apt/sources.list && \
-    echo 'deb-src http://mirrors.aliyun.com/debian/ bookworm-updates main' >> /etc/apt/sources.list && \
-    echo 'deb http://mirrors.aliyun.com/debian-security bookworm-security main' >> /etc/apt/sources.list && \
-    echo 'deb-src http://mirrors.aliyun.com/debian-security bookworm-security main' >> /etc/apt/sources.list
+# 构建前端
+RUN npm run build
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    wkhtmltopdf \
-    xvfb \
-    fonts-wqy-zenhei \
-    fonts-wqy-microhei \
-    fonts-liberation \
-    pandoc \
-    procps \
+# Python后端阶段
+FROM python:3.10-slim
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=api/app.py
+ENV FLASK_ENV=production
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# 启动Xvfb虚拟显示器
-RUN echo '#!/bin/bash\nXvfb :99 -screen 0 1024x768x24 -ac +extension GLX &\nexport DISPLAY=:99\nexec "$@"' > /usr/local/bin/start-xvfb.sh \
-    && chmod +x /usr/local/bin/start-xvfb.sh
+# 设置工作目录
+WORKDIR /app
 
+# 复制Python依赖文件
 COPY requirements.txt .
+COPY pyproject.toml .
 
-#多源轮询安装依赖
-RUN set -e; \
-    for src in \
-        https://mirrors.aliyun.com/pypi/simple \
-        https://pypi.tuna.tsinghua.edu.cn/simple \
-        https://pypi.doubanio.com/simple \
-        https://pypi.org/simple; do \
-      echo "Try installing from $src"; \
-      pip install --no-cache-dir -r requirements.txt -i $src && break; \
-      echo "Failed at $src, try next"; \
-    done
+# 安装Python依赖
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir flask flask-cors
 
-# 复制日志配置文件
-COPY config/ ./config/
+# 复制项目源代码
+COPY tradingagents/ ./tradingagents/
+COPY api/ ./api/
 
-COPY . .
+# 从前端构建阶段复制构建结果
+COPY --from=frontend-builder /app/frontend/build ./api/static
 
-EXPOSE 8501
+# 创建非root用户
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
 
-CMD ["python", "-m", "streamlit", "run", "web/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+# 暴露端口
+EXPOSE 5000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5000/api/health || exit 1
+
+# 启动命令
+CMD ["python", "api/app.py"]
