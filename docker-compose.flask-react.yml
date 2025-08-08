@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # Flask API后端服务
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tradingagents-api
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tradingagents-network
+
+  # React前端开发服务（可选）
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: tradingagents-frontend-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_API_URL=http://localhost:5000
+    depends_on:
+      - api
+    networks:
+      - tradingagents-network
+    profiles:
+      - dev
+
+  # Nginx反向代理（生产环境）
+  nginx:
+    image: nginx:alpine
+    container_name: tradingagents-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+    profiles:
+      - prod
+
+  # Redis缓存服务（可选）
+  redis:
+    image: redis:7-alpine
+    container_name: tradingagents-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+    profiles:
+      - cache
+
+  # MongoDB数据库（可选）
+  mongodb:
+    image: mongo:6
+    container_name: tradingagents-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=tradingagents
+    volumes:
+      - mongodb-data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+    profiles:
+      - database
+
+volumes:
+  redis-data:
+  mongodb-data:
+
+networks:
+  tradingagents-network:
+    driver: bridge
