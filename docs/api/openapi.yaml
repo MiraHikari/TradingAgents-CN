@@ -1,0 +1,213 @@
+openapi: 3.1.0
+info:
+  title: TradingAgents-CN API
+  version: 0.1.12
+  description: |
+    TradingAgents-CN 股票分析平台的轻量API服务。
+    
+    本文档描述了公开可用的HTTP接口，供外部系统集成。
+servers:
+  - url: http://localhost:8000
+    description: 本地开发环境
+  - url: https://example.com
+    description: 生产环境（示例占位）
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: 健康检查
+      operationId: getHealth
+      responses:
+        '200':
+          description: 服务健康
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /status:
+    get:
+      tags: [system]
+      summary: 系统依赖状态
+      operationId: getStatus
+      responses:
+        '200':
+          description: 状态信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+  /stocks:
+    get:
+      tags: [stocks]
+      summary: 列出股票
+      operationId: listStocks
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+          description: 返回的最大条数
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: 跳过的条数
+      responses:
+        '200':
+          description: 股票列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockInfo'
+        '503':
+          description: 后端数据源不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /stocks/search:
+    get:
+      tags: [stocks]
+      summary: 搜索股票
+      operationId: searchStocks
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+          description: 关键词，按代码或名称匹配
+      responses:
+        '200':
+          description: 匹配结果
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockInfo'
+  /stocks/{stock_code}:
+    get:
+      tags: [stocks]
+      summary: 获取股票基础信息
+      operationId: getStock
+      parameters:
+        - name: stock_code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 股票信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockInfo'
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /stocks/{stock_code}/history:
+    get:
+      tags: [stocks]
+      summary: 获取股票历史数据（文本）
+      operationId: getStockHistory
+      parameters:
+        - name: stock_code
+          in: path
+          required: true
+          schema: { type: string }
+        - name: start_date
+          in: query
+          required: false
+          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+          description: 起始日期 YYYY-MM-DD
+        - name: end_date
+          in: query
+          required: false
+          schema: { type: string, pattern: '^\\d{4}-\\d{2}-\\d{2}$' }
+          description: 结束日期 YYYY-MM-DD
+      responses:
+        '200':
+          description: 纯文本时间序列
+          content:
+            text/plain:
+              schema:
+                type: string
+        '503':
+          description: 数据源不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /market/summary:
+    get:
+      tags: [market]
+      summary: 市场概览
+      operationId: getMarketSummary
+      responses:
+        '200':
+          description: 概览信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketSummary'
+        '503':
+          description: 数据源不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        service: { type: string, example: tradingagents-api }
+        version: { type: string, example: 0.1.12 }
+      required: [status, service]
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+            oneOf:
+              - type: string
+              - type: object
+        suggestion:
+          type: string
+      additionalProperties: true
+    StockInfo:
+      type: object
+      description: 股票基础信息（字段取决于数据源）
+      properties:
+        code: { type: string, example: '000001' }
+        name: { type: string, example: '平安银行' }
+        market: { type: string, example: '上海' }
+        category: { type: string, example: '银行' }
+        source: { type: string, example: 'tushare' }
+      additionalProperties: true
+    MarketSummary:
+      type: object
+      properties:
+        total_count: { type: integer, example: 5000 }
+        shanghai_count: { type: integer, example: 2000 }
+        shenzhen_count: { type: integer, example: 3000 }
+        category_stats:
+          type: object
+          additionalProperties:
+            type: integer
+        data_source: { type: string, example: 'tushare' }
+        updated_at: { type: string, format: date-time }
+      required: [total_count]
+    ServiceStatus:
+      type: object
+      properties:
+        service_available: { type: boolean }
+        mongodb_status: { type: string, enum: [connected, disconnected, error] }
+        tdx_api_status: { type: string, enum: [available, limited, unavailable, error] }
+        enhanced_fetcher_available: { type: boolean }
+        fallback_available: { type: boolean }
+        checked_at: { type: string, format: date-time }
+      additionalProperties: true

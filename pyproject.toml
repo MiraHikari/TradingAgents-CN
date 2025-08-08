@@ -46,10 +46,13 @@ dependencies = [
     "tushare>=1.4.21",
     "typing-extensions>=4.14.0",
     "yfinance>=0.2.63",
+    "fastapi>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [project.scripts]
 tradingagents = "main:main"
+tradingagents-api = "api.server:main"
 
 [tool.setuptools.packages.find]
 include = ["tradingagents*"]
